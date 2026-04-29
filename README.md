@@ -4,7 +4,7 @@ This repository contains a linear programming (LP) capacity expansion model buil
 
 ## Project Scope
 The model evaluates and compares two competing grid decarbonization pathways:
-1. **Scenario A (Solar + BESS): High CAPEX, near-zero OPEX grid relying on photovoltaic generation paired with Lithium-ion battery energy storage systems.
+1. **Scenario A (Solar + BESS):** High CAPEX, near-zero OPEX grid relying on photovoltaic generation paired with Lithium-ion battery energy storage systems.
 2. **Scenario B (Solar + Natural Gas CC):** Lower CAPEX, high OPEX grid utilizing firm capacity from Natural Gas Combined Cycle turbines, heavily penalized by California Cap-and-Trade carbon pricing.
 
 ## Mathematical Formulation
@@ -15,7 +15,7 @@ The objective function minimizes the total annualized system cost, subject to st
 
 ## Data Sources
 * **Load Profiles:** CAISO 2025 hourly aggregated demand.
-* **Weather Profiles:** NREL PVWatts tracking solar generation arrays.
+* **Weather Profiles:** CAISO 2025 hourly solar generation arrays.
 * **Economics:** NREL Annual Technology Baseline (ATB) 2024 and EPA FLIGHT emissions data.
 
 ## Installation & Usage
