@@ -1,0 +1,363 @@
+# ============================================================
+# Data + Model Configuration
+# California Solar + BESS vs Solar + Natural Gas
+# Source: NREL ATB 2026, Moderate scenario, Mature technology
+# ============================================================
+
+project:
+  name: california_capacity_expansion
+  location: California
+  model_type: single_node_capacity_expansion
+  planning_year: 2026
+  snapshots_per_year: 8760
+  discount_rate: 0.07
+  currency_year: 2026
+
+# ============================================================
+# Paths
+# ============================================================
+
+paths:
+  raw_data_dir: dataset/raw
+  processed_data_dir: dataset/processed
+  results_dir: results
+
+input_files:
+  combined_raw: aggregated_demand_and_solar_2025_normalized.csv
+
+processed_files:
+  demand_processed: demand_8760.csv
+  solar_processed: solar_cf_8760.csv
+  merged_timeseries: timeseries_8760.csv
+
+# ============================================================
+# Column mappings
+# ============================================================
+
+columns:
+  combined:
+    date: Date
+    hour: HR
+    solar_generation_mw: Solar Gen
+    solar_normalized: Solar Gen Normalized
+    demand_mw: Demand
+    demand_normalized: Demand_Normalized
+
+output_columns:
+  timestamp: timestamp
+  demand_mw: demand_mw
+  solar_cf: solar_cf
+
+# ============================================================
+# Time settings
+# ============================================================
+
+time:
+  year: 2025
+  hour_indexing: one_to_twenty_four
+  date_format: "%m/%d/%Y"
+
+# ============================================================
+# Normalization
+# ============================================================
+
+normalization:
+  demand:
+    use_normalized_for_pypsa: false
+    source_column: Demand
+    normalized_column: Demand_Normalized
+    notes: >
+      Use actual Demand in MW for PyPSA Load.p_set. Demand_Normalized is only
+      for visualization or profile-shape comparison.
+
+  solar:
+    use_existing_normalized_column: true
+    source_column: Solar Gen
+    normalized_column: Solar Gen Normalized
+    caiso_solar_nameplate_mw: 22380
+    clip_min: 0.0
+    clip_max: 1.0
+    notes: >
+      Use Solar Gen Normalized as PyPSA Generator.p_max_pu. If recalculating
+      manually, divide Solar Gen by CAISO installed solar nameplate capacity.
+
+# ============================================================
+# Scenario settings
+# ============================================================
+
+scenario_settings:
+  scenarios:
+    - solar_bess
+    - solar_gas
+    - solar_gas_co2cap
+    - solar_gas_rps
+
+  use_load_shedding: true
+  value_of_lost_load_per_mwh: 30000
+  full_year_hourly: true
+  planning_reserve_margin: 0.15
+
+# ============================================================
+# Technologies
+# ============================================================
+
+technologies:
+
+  # ------------------------------------------------------------
+  # Utility-scale solar PV
+  # NREL ATB 2026, Utility PV, Moderate, R&D case
+  # ------------------------------------------------------------
+  solar:
+    enabled: true
+    carrier: solar
+    capital_extendable: true
+
+    capex_per_kw: 1405.5
+    capex_range_per_kw:
+      low: 1379
+      high: 1432
+
+    fixed_om_per_kw_year: 20
+    variable_om_per_mwh: 0
+    lifetime_years: 30
+
+    capacity_factor_range:
+      low: 0.20
+      high: 0.32
+
+    lcoe_range_per_mwh:
+      low: 34
+      high: 57
+
+    # Direct operational emissions
+    co2_intensity_t_per_mwh: 0
+
+    # Life-cycle emissions (NREL LCA table)
+    lifecycle_emissions_gco2e_per_kwh: 43
+    lifecycle_breakdown_gco2e_per_kwh:
+      one_time_upstream: 28
+      ongoing_combustion: 0
+      ongoing_non_combustion: 10
+      one_time_downstream: 5
+      total_life_cycle: 43
+
+    source_notes: >
+      NREL ATB 2026 Utility PV. Life-cycle emissions from NREL LCA table:
+      43 gCO2e/kWh. Midpoint CAPEX: 1,405.5 $/kW.
+
+  # ------------------------------------------------------------
+  # Utility-scale battery storage (4-hour BESS)
+  # NREL ATB 2026, Utility-Scale Battery Storage, Moderate
+  # ------------------------------------------------------------
+  bess:
+    enabled: true
+    carrier: battery
+    capital_extendable: true
+
+    duration_hours: 4
+    roundtrip_efficiency: 0.90
+    min_state_of_charge: 0.10
+    max_state_of_charge: 0.90
+    initial_state_of_charge: 0.50
+    cyclic_state_of_charge: true
+
+    capex_per_kw: 2171.5
+    capex_range_per_kw:
+      low: 836
+      high: 3507
+
+    overnight_capital_cost_per_kw: 1995
+    overnight_capital_cost_range_per_kw:
+      low: 706
+      high: 3284
+
+    fixed_om_per_kw_year: 50
+    fixed_om_range_per_kw_year:
+      low: 18
+      high: 82
+
+    variable_om_per_mwh: 0
+    degradation_cost_per_mwh_throughput: 0
+    lifetime_years: 15
+
+    # Direct operational emissions
+    co2_intensity_t_per_mwh: 0
+
+    # Life-cycle emissions (NREL LCA table)
+    lifecycle_emissions_gco2e_per_kwh: 33
+    lifecycle_breakdown_gco2e_per_kwh:
+      one_time_upstream: 32
+      ongoing_combustion: 0
+      ongoing_non_combustion: 0
+      one_time_downstream: 3.4
+      total_life_cycle: 33
+
+    source_notes: >
+      NREL ATB 2026 Utility-Scale Battery Storage. Midpoint CAPEX: 2,171.5 $/kW,
+      fixed O&M: 50 $/kW-year, OCC: 1,995 $/kW. Life-cycle emissions from
+      NREL LCA table: 33 gCO2e/kWh.
+
+  # ------------------------------------------------------------
+  # Natural gas combined cycle
+  # NREL ATB 2026, Natural Gas CC, Moderate
+  # ------------------------------------------------------------
+  natural_gas_cc:
+    enabled: true
+    carrier: natural_gas_cc
+    capital_extendable: true
+
+    capex_per_kw: 1513
+    capex_range_per_kw:
+      low: 1310
+      high: 1716
+
+    overnight_capital_cost_per_kw: 1257.5
+    overnight_capital_cost_range_per_kw:
+      low: 1075
+      high: 1440
+
+    fixed_om_per_kw_year: 32.5
+    fixed_om_range_per_kw_year:
+      low: 26
+      high: 39
+
+    variable_om_per_mwh: 4.5
+    variable_om_range_per_mwh:
+      low: 2.1
+      high: 6.9
+
+    lifetime_years: 30
+
+    # Fuel and carbon cost assumptions
+    heat_rate_mmbtu_per_mwh: 6.8
+    fuel_price_per_mmbtu: 4.0
+    fuel_cost_per_mwh: 27.2        # 6.8 MMBtu/MWh * 4.0 $/MMBtu
+    carbon_price_per_tco2: 30      # CA Cap-and-Trade
+    carbon_cost_per_mwh: 10.8      # 0.36 tCO2/MWh * 30 $/tCO2
+    marginal_cost_per_mwh: 42.5    # variable O&M + fuel + carbon = 4.5 + 27.2 + 10.8
+
+    # Direct operational emissions (used in PyPSA dispatch accounting)
+    co2_intensity_t_per_mwh: 0.36
+
+    # Life-cycle emissions (NREL LCA table)
+    lifecycle_emissions_gco2e_per_kwh: 486
+    lifecycle_breakdown_gco2e_per_kwh:
+      one_time_upstream: 0.8
+      ongoing_combustion: 389
+      ongoing_non_combustion: 71
+      one_time_downstream: 0.02
+      total_life_cycle: 486
+
+    source_notes: >
+      NREL ATB 2026 Natural Gas CC. Midpoint CAPEX: 1,513 $/kW, fixed O&M:
+      32.5 $/kW-year, OCC: 1,257.5 $/kW. Fuel cost: 6.8 MMBtu/MWh * 4.0 $/MMBtu
+      = 27.2 $/MWh. Carbon cost: 0.36 tCO2/MWh * 30 $/tCO2 = 10.8 $/MWh.
+      Total marginal cost: 4.5 + 27.2 + 10.8 = 42.5 $/MWh.
+      Life-cycle emissions from NREL LCA table: 486 gCO2e/kWh.
+
+  # ------------------------------------------------------------
+  # Utility-scale PV-plus-battery (reference only, not modeled separately)
+  # NREL ATB 2026, Utility-Scale PV-Plus-Battery, Moderate
+  # ------------------------------------------------------------
+  solar_plus_battery:
+    enabled: false
+    carrier: solar_plus_battery
+
+    capex_per_kw: 2077
+    capex_range_per_kw:
+      low: 1963
+      high: 2191
+
+    overnight_capital_cost_per_kw: 1896
+    overnight_capital_cost_range_per_kw:
+      low: 1792
+      high: 2000
+
+    fixed_om_per_kw_year: 55
+    fixed_om_range_per_kw_year:
+      low: 51
+      high: 59
+
+    variable_om_per_mwh: 0
+    lifetime_years: 30
+
+    capacity_factor_range:
+      low: 0.21
+      high: 0.34
+
+    lcoe_range_per_mwh:
+      low: 61
+      high: 103
+
+    co2_intensity_t_per_mwh: 0
+
+    source_notes: >
+      NREL ATB 2026 Utility-Scale PV-Plus-Battery. Included for reference only.
+      Solar and BESS are modeled separately in the optimizer.
+
+# ============================================================
+# Capacity limits (optional — leave null to allow free optimization)
+# ============================================================
+
+capacity_limits:
+  solar:
+    min_capacity_mw: 0
+    max_capacity_mw:
+
+  bess:
+    min_power_capacity_mw: 0
+    max_power_capacity_mw:
+    min_energy_capacity_mwh: 0
+    max_energy_capacity_mwh:
+
+  natural_gas_cc:
+    min_capacity_mw: 0
+    max_capacity_mw:
+
+# ============================================================
+# Emissions accounting
+# ============================================================
+
+emissions_accounting:
+  include_operational_emissions: true
+  include_lifecycle_emissions: true
+  social_cost_of_carbon_per_tco2: 30
+  notes: >
+    Life-cycle emissions factors in gCO2e/kWh. Operational and life-cycle
+    emissions are reported separately in the summary output.
+
+# ============================================================
+# Outputs
+# ============================================================
+
+outputs:
+  save_dispatch: true
+  save_state_of_charge: true
+  save_summary: true
+  save_comparison: true
+
+  metrics:
+    - total_cost
+    - average_cost_per_mwh
+    - load_mwh
+    - solar_capacity_mw
+    - solar_generation_mwh
+    - solar_curtailment_mwh
+    - battery_power_mw
+    - battery_energy_mwh
+    - battery_throughput_mwh
+    - gas_capacity_mw
+    - gas_generation_mwh
+    - emissions_tco2
+    - load_shedding_mwh
+
+# ============================================================
+# Policy Constraints
+# ============================================================
+
+constraints:
+  # Scenario 3: CA SB 100 interim target ~20 MtCO2/year by 2030
+  co2_cap_tco2_per_year: 25000000
+
+  # Scenario 4: CPUC RPS 60% renewables by 2030
+  min_renewable_fraction: 0.60
