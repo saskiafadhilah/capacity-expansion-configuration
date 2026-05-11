@@ -162,7 +162,7 @@ def plot_system_cost(comparison, save_path):
 # ============================================================
 
 def plot_capacity_stacked(comparison, save_path):
-    df = comparison[comparison["scenario"] != "solar_gas_rps"].copy()
+    df = comparison.copy()
     scenarios = df["scenario"].tolist()
     labels    = [slabel(s) for s in scenarios]
     x         = np.arange(len(scenarios))
@@ -181,8 +181,7 @@ def plot_capacity_stacked(comparison, save_path):
     ax.axhline(44, color="black", linewidth=1, linestyle=":", alpha=0.6,
                label="CA peak demand ≈ 44 GW")
     ax.set_xticks(x); ax.set_xticklabels(labels)
-    ax.set_title("Optimized Installed Capacity by Scenario\n"
-                 "(solar_gas_rps excluded — requires 23,534 GW solar)")
+    ax.set_title("Optimized Installed Capacity by Scenario")                
     ax.set_ylabel("Capacity (GW)")
     ax.legend(loc="upper right")
 
