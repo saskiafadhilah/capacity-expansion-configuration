@@ -1,7 +1,7 @@
 # ============================================================
 # Data + Model Configuration
 # California Solar + BESS vs Solar + Natural Gas
-# Source: NREL ATB 2026, Moderate scenario, Mature technology
+# Source: NREL ATB 2026, Moderate scenario, Market case
 # ============================================================
 
 project:
@@ -93,10 +93,16 @@ scenario_settings:
     - solar_gas_rps
 
   use_load_shedding: true
-  value_of_lost_load_per_mwh: 30000
+  value_of_lost_load_per_mwh: 1500
   full_year_hourly: true
   planning_reserve_margin: 0.15
 
+  # ── Value of Lost Load (VOLL) ──────────────────────────────
+  # VOLL represents the economic cost to consumers of an involuntary
+  # interruption of electricity supply (CAISO, 2025).
+  # It states directly that the CAISO market currently uses $1,000–2,000/MWh as penalty prices 
+  # but acknowledges this understates true VOLL, and cites California-specific estimates of 
+  # $10,000–14,000/MWh for residential customers.
 # ============================================================
 # Technologies
 # ============================================================
@@ -105,7 +111,7 @@ technologies:
 
   # ------------------------------------------------------------
   # Utility-scale solar PV
-  # NREL ATB 2026, Utility PV, Moderate, R&D case
+  # NREL ATB 2026, Utility PV, Market scenario
   # ------------------------------------------------------------
   solar:
     enabled: true
@@ -117,7 +123,18 @@ technologies:
       low: 1379
       high: 1432
 
+    # Overnight Capital Cost (OCC) — reference only, not used in annuity calc
+    # OCC excludes financing costs; capex_per_kw is used for annuity
+    overnight_capital_cost_per_kw: 1247.5
+    overnight_capital_cost_range_per_kw:
+      low: 1228
+      high: 1267
+
     fixed_om_per_kw_year: 20
+    fixed_om_range_per_kw_year:
+      low: 20
+      high: 20
+
     variable_om_per_mwh: 0
     lifetime_years: 30
 
@@ -126,8 +143,8 @@ technologies:
       high: 0.32
 
     lcoe_range_per_mwh:
-      low: 34
-      high: 57
+      low: 19
+      high: 44
 
     # Direct operational emissions
     co2_intensity_t_per_mwh: 0
@@ -142,12 +159,14 @@ technologies:
       total_life_cycle: 43
 
     source_notes: >
-      NREL ATB 2026 Utility PV. Life-cycle emissions from NREL LCA table:
-      43 gCO2e/kWh. Midpoint CAPEX: 1,405.5 $/kW.
+      NREL ATB 2026 Utility PV, Market scenario. Midpoint CAPEX: 1,405.5 $/kW
+      (range 1,379–1,432 $/kW). OCC: 1,247.5 $/kW (range 1,228–1,267 $/kW).
+      Fixed O&M: 20 $/kW-yr. LCOE range: 19–44 $/MWh. Capacity factor: 0.20–0.32.
+      Life-cycle emissions from NREL LCA table: 43 gCO2e/kWh.
 
   # ------------------------------------------------------------
   # Utility-scale battery storage (4-hour BESS)
-  # NREL ATB 2026, Utility-Scale Battery Storage, Moderate
+  # NREL ATB 2026, Utility-Scale Battery Storage, Market scenario
   # ------------------------------------------------------------
   bess:
     enabled: true
@@ -166,6 +185,7 @@ technologies:
       low: 836
       high: 3507
 
+    # Overnight Capital Cost (OCC) — reference only
     overnight_capital_cost_per_kw: 1995
     overnight_capital_cost_range_per_kw:
       low: 706
@@ -193,13 +213,15 @@ technologies:
       total_life_cycle: 33
 
     source_notes: >
-      NREL ATB 2026 Utility-Scale Battery Storage. Midpoint CAPEX: 2,171.5 $/kW,
-      fixed O&M: 50 $/kW-year, OCC: 1,995 $/kW. Life-cycle emissions from
-      NREL LCA table: 33 gCO2e/kWh.
+      NREL ATB 2026 Utility-Scale Battery Storage, Market scenario.
+      Midpoint CAPEX: 2,171.5 $/kW (range 836–3,507 $/kW).
+      OCC: 1,995 $/kW (range 706–3,284 $/kW).
+      Fixed O&M: 50 $/kW-yr (range 18–82 $/kW-yr).
+      Life-cycle emissions from NREL LCA table: 33 gCO2e/kWh.
 
   # ------------------------------------------------------------
   # Natural gas combined cycle
-  # NREL ATB 2026, Natural Gas CC, Moderate
+  # NREL ATB 2026, Natural Gas CC, Market scenario
   # ------------------------------------------------------------
   natural_gas_cc:
     enabled: true
@@ -249,15 +271,18 @@ technologies:
       total_life_cycle: 486
 
     source_notes: >
-      NREL ATB 2026 Natural Gas CC. Midpoint CAPEX: 1,513 $/kW, fixed O&M:
-      32.5 $/kW-year, OCC: 1,257.5 $/kW. Fuel cost: 6.8 MMBtu/MWh * 4.0 $/MMBtu
-      = 27.2 $/MWh. Carbon cost: 0.36 tCO2/MWh * 30 $/tCO2 = 10.8 $/MWh.
+      NREL ATB 2026 Natural Gas CC, Market scenario. Midpoint CAPEX: 1,513 $/kW
+      (range 1,310–1,716 $/kW). OCC: 1,257.5 $/kW (range 1,075–1,440 $/kW).
+      Fixed O&M: 32.5 $/kW-yr (range 26–39 $/kW-yr).
+      Variable O&M: 4.5 $/MWh (range 2.1–6.9 $/MWh).
+      Fuel cost: 6.8 MMBtu/MWh * 4.0 $/MMBtu = 27.2 $/MWh.
+      Carbon cost: 0.36 tCO2/MWh * 30 $/tCO2 = 10.8 $/MWh.
       Total marginal cost: 4.5 + 27.2 + 10.8 = 42.5 $/MWh.
       Life-cycle emissions from NREL LCA table: 486 gCO2e/kWh.
 
   # ------------------------------------------------------------
   # Utility-scale PV-plus-battery (reference only, not modeled separately)
-  # NREL ATB 2026, Utility-Scale PV-Plus-Battery, Moderate
+  # NREL ATB 2026, Utility-Scale PV-Plus-Battery, Market scenario
   # ------------------------------------------------------------
   solar_plus_battery:
     enabled: false
@@ -286,13 +311,17 @@ technologies:
       high: 0.34
 
     lcoe_range_per_mwh:
-      low: 61
-      high: 103
+      low: 44
+      high: 86
 
     co2_intensity_t_per_mwh: 0
 
     source_notes: >
-      NREL ATB 2026 Utility-Scale PV-Plus-Battery. Included for reference only.
+      NREL ATB 2026 Utility-Scale PV-Plus-Battery, Market scenario.
+      Midpoint CAPEX: 2,077 $/kW (range 1,963–2,191 $/kW).
+      OCC: 1,896 $/kW (range 1,792–2,000 $/kW).
+      Fixed O&M: 55 $/kW-yr (range 51–59 $/kW-yr).
+      LCOE range: 44–86 $/MWh. Included for reference only.
       Solar and BESS are modeled separately in the optimizer.
 
 # ============================================================
@@ -356,8 +385,8 @@ outputs:
 # ============================================================
 
 constraints:
-  # Scenario 3: CA SB 100 interim target ~20 MtCO2/year by 2030
+  # Scenario 3: CPUC 2035 target, CAISO share ~20 MtCO2 (Decision 24-02-047)
   co2_cap_tco2_per_year: 25000000
 
-  # Scenario 4: CPUC RPS 60% renewables by 2030
+  # Scenario 4: California SB 100 (2018) — 60% renewables by 2030
   min_renewable_fraction: 0.60
