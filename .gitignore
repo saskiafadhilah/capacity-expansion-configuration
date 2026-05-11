@@ -17,3 +17,4 @@ venv/
 
 # Jupyter
 .ipynb_checkpoints/
+__pycache__/
