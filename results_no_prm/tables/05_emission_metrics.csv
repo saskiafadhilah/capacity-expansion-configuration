@@ -1,0 +1,6 @@
+Scenario,Operational CO₂ (MtCO₂/year),Solar lifecycle CO₂e (MtCO₂e),Battery lifecycle CO₂e (MtCO₂e),Gas lifecycle CO₂e (MtCO₂e),Total incl. lifecycle CO₂e (MtCO₂e),Lifecycle carbon cost ($M),Total carbon cost incl. LCA ($M)
+Solar + BESS,0.0,10.1958,7.5936,0.0,17.7894,533.6814,533.6814
+Solar + BESS (8h),0.0,10.5009,7.8165,0.0,18.3174,549.522,549.522
+Solar + Nat. Gas,76.0473,0.5915,0.0,102.6639,179.3026,3097.6599,5379.0792
+Solar + Gas (CO₂ Cap),25.0,5.1601,0.0,33.75,63.9101,1167.3045,1917.3045
+Solar + Gas (60% RPS),32.3982,5.805,0.0,43.7376,81.9408,1486.2778,2458.2239

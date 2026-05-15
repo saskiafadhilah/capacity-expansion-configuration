@@ -1,3 +1,4 @@
+from networkx import config
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -40,6 +41,7 @@ plt.rcParams.update({
 
 SCENARIO_LABELS = {
     "solar_bess":        "Solar +\nBESS",
+    "solar_bess_8h":     "Solar +\nBESS (8h)",
     "solar_gas":         "Solar +\nNat. Gas",
     "solar_gas_co2cap":  "Solar + Gas\n(CO₂ Cap)",
     "solar_gas_rps":     "Solar + Gas\n(60% RPS)",
@@ -47,6 +49,7 @@ SCENARIO_LABELS = {
 
 SCENARIO_COLORS = {
     "solar_bess":        "#2196a8",
+    "solar_bess_8h" :    "#1a7abf",  
     "solar_gas":         "#e05c5c",
     "solar_gas_co2cap":  "#e8912d",
     "solar_gas_rps":     "#6abf69",
@@ -581,6 +584,150 @@ def plot_supply_demand_balance(n, scenario, save_path):
     plt.close()
     print(f"  Saved: {save_path.name}")
 
+# ============================================================
+# ADD THIS FUNCTION to visualizer.py — paste before def main()
+# ============================================================
+
+def plot_lcoe_breakeven(config, save_path):
+    """
+    FIGURE 13: Solar vs Gas LCOE breakeven vs social cost of carbon.
+    Shows the carbon price at which solar becomes cheaper than gas on LCOE basis.
+    Call from main() as:
+        plot_lcoe_breakeven(config, figures_dir / "13_lcoe_breakeven.png")
+
+    References for SCC range:
+        $30  → CARB Cap-and-Trade 2025
+        $51  → EPA IWG (2016) central estimate
+        $190 → EPA IWG (2023) central estimate
+        $200 → Rennert et al. (2022), Nature 610, 687-692
+    """
+    import numpy as np
+
+    g = config["technologies"]["natural_gas_cc"]
+    s = config["technologies"]["solar"]
+    r = config["project"]["discount_rate"]
+
+    def annuity_f(rate, n):
+        return rate / (1 - (1 + rate) ** (-n))
+
+    def ann_cap(capex_kw, om_kw, n, rate):
+        return annuity_f(rate, n) * capex_kw * 1000 + om_kw * 1000
+
+    solar_cap_cost = ann_cap(s["capex_per_kw"], s["fixed_om_per_kw_year"],
+                              s["lifetime_years"], r)
+    gas_cap_cost   = ann_cap(g["capex_per_kw"], g["fixed_om_per_kw_year"],
+                              g["lifetime_years"], r)
+
+    solar_cf_base  = 0.302
+    solar_cf_low   = 0.32    # higher CF = lower LCOE
+    solar_cf_high  = 0.20    # lower CF = higher LCOE
+
+    gas_cf_base    = 0.509
+    gas_cf_low     = 0.65
+    gas_cf_high    = 0.40
+
+    solar_lcoe_base  = solar_cap_cost / (solar_cf_base * 8760)
+    solar_lcoe_low   = solar_cap_cost / (solar_cf_low  * 8760)
+    solar_lcoe_high  = solar_cap_cost / (solar_cf_high * 8760)
+
+    fuel_cost = g["fuel_price_per_mmbtu"] * g["heat_rate_mmbtu_per_mwh"]
+
+    def gas_lcoe(scc, cf):
+        cap = gas_cap_cost / (cf * 8760)
+        return cap + g["variable_om_per_mwh"] + fuel_cost + scc * g["co2_intensity_t_per_mwh"]
+
+    scc_range = np.linspace(0, 210, 400)
+
+    gas_base  = [gas_lcoe(scc, gas_cf_base) for scc in scc_range]
+    gas_low   = [gas_lcoe(scc, gas_cf_low)  for scc in scc_range]
+    gas_high  = [gas_lcoe(scc, gas_cf_high) for scc in scc_range]
+
+    # Breakeven: solar_lcoe_base = gas_no_carbon_base + scc * co2_intensity
+    gas_no_carbon_base = gas_cap_cost / (gas_cf_base * 8760) + \
+                         g["variable_om_per_mwh"] + fuel_cost
+    breakeven_scc = (solar_lcoe_base - gas_no_carbon_base) / g["co2_intensity_t_per_mwh"]
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Gas LCOE
+    ax.plot(scc_range, gas_base, color="#e05c5c", lw=2.5,
+            label=f"Gas LCOE — base CF ({gas_cf_base:.2f})")
+    ax.fill_between(scc_range, gas_low, gas_high,
+                    color="#e05c5c", alpha=0.12,
+                    label=f"Gas LCOE range (CF {gas_cf_low}–{gas_cf_high})")
+
+    # Solar LCOE
+    ax.axhline(solar_lcoe_base, color="#f5c518", lw=2.5,
+               label=f"Solar LCOE — base CF ({solar_cf_base:.2f}) = ${solar_lcoe_base:.1f}/MWh")
+    ax.axhspan(solar_lcoe_low, solar_lcoe_high, color="#f5c518", alpha=0.12,
+               label=f"Solar LCOE range (CF {solar_cf_high}–{solar_cf_low}) = "
+                     f"${solar_lcoe_low:.0f}–${solar_lcoe_high:.0f}/MWh")
+
+    # Breakeven line
+    ax.axvline(breakeven_scc, color="#2196a8", lw=2, ls="-.",
+               label=f"Breakeven SCC = ${breakeven_scc:.0f}/tCO₂")
+    ax.annotate(
+        f"Breakeven\n${breakeven_scc:.0f}/tCO₂",
+        xy=(breakeven_scc, solar_lcoe_base),
+        xytext=(breakeven_scc + 10, solar_lcoe_base + 7),
+        fontsize=10, color="#2196a8", fontweight="bold",
+        arrowprops=dict(arrowstyle="->", color="#2196a8", lw=1.5)
+    )
+
+    # Reference SCC annotations
+    refs = [
+        (30,  "CA C&T\n$30\n(CARB 2025)"),
+        (51,  "EPA IWG\n$51\n(2016)"),
+        (190, "EPA IWG\n$190\n(2023)"),
+    ]
+    ymax = max(gas_high)
+    for xval, label in refs:
+        ax.axvline(xval, color="#aaaaaa", lw=1, ls="--", alpha=0.6)
+        ax.text(xval + 1.5, ymax * 0.15, label,
+                fontsize=7.5, color="#666666", va="bottom")
+
+    # Region shading
+    if 0 < breakeven_scc < 210:
+        ax.fill_betweenx([0, ymax], 0, breakeven_scc,
+                         color="#e05c5c", alpha=0.04)
+        ax.fill_betweenx([0, ymax], breakeven_scc, 210,
+                         color="#f5c518", alpha=0.04)
+
+    # Labels
+    mid_left  = breakeven_scc / 2
+    mid_right = min((breakeven_scc + 210) / 2, 200)
+    ax.text(mid_left,  ymax * 0.55, "Gas\ncheaper",
+            ha="center", fontsize=10, color="#e05c5c", alpha=0.7, style="italic")
+    ax.text(mid_right, ymax * 0.55, "Solar\ncheaper",
+            ha="center", fontsize=10, color="#c9a000", alpha=0.7, style="italic")
+
+    ax.set_xlabel("Social Cost of Carbon ($/tCO₂)", fontsize=12)
+    ax.set_ylabel("LCOE ($/MWh)", fontsize=12)
+    ax.set_title(
+        "Solar vs. Gas LCOE Breakeven — Carbon Price Sensitivity\n"
+        f"Breakeven at ${breakeven_scc:.0f}/tCO₂  |  "
+        f"CA C&T $30 is {'below' if 30 < breakeven_scc else 'above'} breakeven  |  "
+        f"EPA 2023 SCC $190 is {'below' if 190 < breakeven_scc else 'above'} breakeven\n"
+        "Sources: NREL ATB 2026; CARB (2025); EPA IWG (2016, 2023); Rennert et al. (2022)"
+    )
+    ax.legend(loc="upper left", fontsize=8.5)
+    ax.set_xlim(0, 210)
+    ax.set_ylim(bottom=0)
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print(f"  Saved: {save_path.name}")
+
+
+# ============================================================
+# ADD THIS LINE inside main() in visualizer.py, after the
+# existing summary figures block:
+#
+#     plot_lcoe_breakeven(config, figures_dir / "13_lcoe_breakeven.png")
+#
+# ============================================================
+
 
 # ============================================================
 # Main
@@ -625,6 +772,8 @@ def main():
             figures_dir / f"11_dispatch_winter_week_{scenario}.png")
         plot_soc(n, scenario,
             figures_dir / f"12_battery_soc_{scenario}.png")
+        plot_lcoe_breakeven(config, 
+            figures_dir / "13_lcoe_breakeven.png")
 
     print(f"\nAll figures saved to: {figures_dir}")
 

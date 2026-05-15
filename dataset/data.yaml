@@ -88,21 +88,75 @@ normalization:
 scenario_settings:
   scenarios:
     - solar_bess
+    - solar_bess_8h
     - solar_gas
     - solar_gas_co2cap
     - solar_gas_rps
 
   use_load_shedding: true
-  value_of_lost_load_per_mwh: 1500
   full_year_hourly: true
-  planning_reserve_margin: 0.15
 
-  # ── Value of Lost Load (VOLL) ──────────────────────────────
-  # VOLL represents the economic cost to consumers of an involuntary
-  # interruption of electricity supply (CAISO, 2025).
-  # It states directly that the CAISO market currently uses $1,000–2,000/MWh as penalty prices 
-  # but acknowledges this understates true VOLL, and cites California-specific estimates of 
-  # $10,000–14,000/MWh for residential customers.
+  # ── Value of Lost Load (VOLL) ────────────────────────────────
+  # VOLL = $30,000/MWh — blended California commercial-industrial estimate.
+  # VOLL is applied ONLY to gas scenarios as an unserved load penalty.
+  # In BESS scenarios, the battery physically handles all residual demand;
+  # VOLL is not needed as a feasibility backstop in those scenarios.
+  #
+  # Derivation (Gorman & Callaway, 2024; CAISO Price Formation WG, 2025):
+  #   Residential:  $12,000/MWh * 35% =  $4,200
+  #   Commercial:   $35,000/MWh * 35% = $12,250
+  #   Industrial:   $30,000/MWh * 20% =  $6,000
+  #   Other:        $25,000/MWh * 10% =  $2,500
+  #   Blended:                           $24,950 -> model uses $30,000 (conservative)
+  #
+  # WARNING: Setting this below $10,000 causes the optimizer to accept
+  # excessive load shedding rather than build adequate capacity.
+  value_of_lost_load_per_mwh: 30000
+
+  # ── Planning Reserve Margin (PRM) ────────────────────────────
+  # 17% above peak demand per CPUC System RA requirement (beginning 2024).
+  # Source: CPUC Resource Adequacy Program, R.23-10-011.
+  # Decisions: D.24-06-004 (Track 1), D.24-12-003 (Track 2).
+  # Previous requirement was 15% — updated to 17% effective 2024.
+  # Required firm capacity = 43,923 MW * 1.17 = 51,390 MW
+  planning_reserve_margin: 0.17
+
+  # ── ELCC — Effective Load Carrying Capability ─────────────────
+  # ELCC_g is the fraction of technology g's nameplate capacity that
+  # counts as firm capacity during the top-10 highest net-load hours
+  # (the hours when demand minus renewables is greatest).
+  #
+  # The ELCC-weighted PRM constraint (C6):
+  #   ELCC_gas   * P_gas   +
+  #   ELCC_solar * P_solar +
+  #   ELCC_bess  * P_bess  >= (1 + PRM) * D_peak
+  #
+  # This replaces the old gas-only p_nom_min approach, which incorrectly
+  # credited gas 100% and solar/BESS 0% toward reserve margin.
+  #
+  # Sources:
+  #   natural_gas_cc: CAISO Resource Adequacy qualifying capacity rules
+  #                   (CPUC R.23-10-011). Firm dispatchable at any hour.
+  #                   5% reduction reflects typical forced outage rate.
+  #
+  #   solar:          Pham, Cole & Gagnon (2024), NREL/TP-7A40-89587,
+  #                   Figure 4 panel 1. CAISO region, 2026 median = 21%.
+  #                   Solar output is near-zero at 7-9 PM summer peak.
+  #                   ELCC declines with higher solar penetration.
+  #
+  #   bess_4h:        Pham et al. (2024), Figure 4 panel 4.
+  #                   CAISO 2026 average 4-hr battery capacity credit.
+  #                   Conservative midpoint; CAISO values typically 88-100%.
+  #
+  #   bess_8h:        Pham et al. (2024), Figure 4 panel 5.
+  #                   8-hr batteries achieve near-100% capacity credit
+  #                   in almost all CAISO scenarios through 2036.
+  elcc:
+    natural_gas_cc: 0.95
+    solar:          0.21
+    bess_4h:        0.85
+    bess_8h:        1.00
+
 # ============================================================
 # Technologies
 # ============================================================
@@ -123,8 +177,6 @@ technologies:
       low: 1379
       high: 1432
 
-    # Overnight Capital Cost (OCC) — reference only, not used in annuity calc
-    # OCC excludes financing costs; capex_per_kw is used for annuity
     overnight_capital_cost_per_kw: 1247.5
     overnight_capital_cost_range_per_kw:
       low: 1228
@@ -146,10 +198,8 @@ technologies:
       low: 19
       high: 44
 
-    # Direct operational emissions
     co2_intensity_t_per_mwh: 0
 
-    # Life-cycle emissions (NREL LCA table)
     lifecycle_emissions_gco2e_per_kwh: 43
     lifecycle_breakdown_gco2e_per_kwh:
       one_time_upstream: 28
@@ -160,8 +210,8 @@ technologies:
 
     source_notes: >
       NREL ATB 2026 Utility PV, Market scenario. Midpoint CAPEX: 1,405.5 $/kW
-      (range 1,379–1,432 $/kW). OCC: 1,247.5 $/kW (range 1,228–1,267 $/kW).
-      Fixed O&M: 20 $/kW-yr. LCOE range: 19–44 $/MWh. Capacity factor: 0.20–0.32.
+      (range 1,379-1,432 $/kW). OCC: 1,247.5 $/kW (range 1,228-1,267 $/kW).
+      Fixed O&M: 20 $/kW-yr. LCOE range: 19-44 $/MWh. CF: 0.20-0.32.
       Life-cycle emissions from NREL LCA table: 43 gCO2e/kWh.
 
   # ------------------------------------------------------------
@@ -175,8 +225,14 @@ technologies:
 
     duration_hours: 4
     roundtrip_efficiency: 0.90
+
+    # SOC window — used to compute usable energy in PyPSA
+    # C4:  state_of_charge_min = 0.10 -> E_t >= 0.10 * p_nom * 4h (PyPSA native)
+    # C4b: max_state_of_charge = 0.90 -> E_t <= 0.90 * p_nom * 4h (linopy extra_functionality)
+    # Usable window: (0.90 - 0.10) * 4h = 3.2h equivalent per MW of power capacity
     min_state_of_charge: 0.10
     max_state_of_charge: 0.90
+
     initial_state_of_charge: 0.50
     cyclic_state_of_charge: true
 
@@ -185,7 +241,6 @@ technologies:
       low: 836
       high: 3507
 
-    # Overnight Capital Cost (OCC) — reference only
     overnight_capital_cost_per_kw: 1995
     overnight_capital_cost_range_per_kw:
       low: 706
@@ -200,10 +255,8 @@ technologies:
     degradation_cost_per_mwh_throughput: 0
     lifetime_years: 15
 
-    # Direct operational emissions
     co2_intensity_t_per_mwh: 0
 
-    # Life-cycle emissions (NREL LCA table)
     lifecycle_emissions_gco2e_per_kwh: 33
     lifecycle_breakdown_gco2e_per_kwh:
       one_time_upstream: 32
@@ -214,10 +267,55 @@ technologies:
 
     source_notes: >
       NREL ATB 2026 Utility-Scale Battery Storage, Market scenario.
-      Midpoint CAPEX: 2,171.5 $/kW (range 836–3,507 $/kW).
-      OCC: 1,995 $/kW (range 706–3,284 $/kW).
-      Fixed O&M: 50 $/kW-yr (range 18–82 $/kW-yr).
-      Life-cycle emissions from NREL LCA table: 33 gCO2e/kWh.
+      Midpoint CAPEX: 2,171.5 $/kW (range 836-3,507 $/kW).
+      OCC: 1,995 $/kW (range 706-3,284 $/kW).
+      Fixed O&M: 50 $/kW-yr (range 18-82 $/kW-yr).
+      Life-cycle emissions: 33 gCO2e/kWh.
+
+  # ------------------------------------------------------------
+  # Utility-scale battery storage (8-hour BESS)
+  # NREL ATB 2026, Utility-Scale Battery Storage, Market scenario
+  # Extended duration variant for solar_bess_8h scenario
+  # ------------------------------------------------------------
+  bess_8h:
+    enabled: true
+    carrier: battery
+    capital_extendable: true
+
+    duration_hours: 8
+    roundtrip_efficiency: 0.85
+
+    # SOC window
+    # C4:  state_of_charge_min = 0.05 -> E_t >= 0.05 * p_nom * 8h
+    # C4b: max_state_of_charge = 0.95 -> E_t <= 0.95 * p_nom * 8h
+    # Usable window: (0.95 - 0.05) * 8h = 7.2h equivalent
+    min_state_of_charge: 0.05
+    max_state_of_charge: 0.95
+
+    initial_state_of_charge: 0.50
+    cyclic_state_of_charge: true
+
+    capex_per_kw: 3200
+    fixed_om_per_kw_year: 75
+    variable_om_per_mwh: 0
+    degradation_cost_per_mwh_throughput: 0
+    lifetime_years: 15
+
+    co2_intensity_t_per_mwh: 0
+
+    lifecycle_emissions_gco2e_per_kwh: 33
+    lifecycle_breakdown_gco2e_per_kwh:
+      one_time_upstream: 32
+      ongoing_combustion: 0
+      ongoing_non_combustion: 0
+      one_time_downstream: 3.4
+      total_life_cycle: 33
+
+    source_notes: >
+      8-hour BESS variant for solar_bess_8h scenario.
+      ELCC = 1.00 (Pham et al., 2024, NREL/TP-7A40-89587, Figure 4 panel 5).
+      8-hr batteries achieve near-100% capacity credit in almost all CAISO
+      scenarios through 2036. Sufficient duration to cover full evening peak.
 
   # ------------------------------------------------------------
   # Natural gas combined cycle
@@ -253,15 +351,12 @@ technologies:
     # Fuel and carbon cost assumptions
     heat_rate_mmbtu_per_mwh: 6.8
     fuel_price_per_mmbtu: 4.0
-    fuel_cost_per_mwh: 27.2        # 6.8 MMBtu/MWh * 4.0 $/MMBtu
-    carbon_price_per_tco2: 30      # CA Cap-and-Trade
-    carbon_cost_per_mwh: 10.8      # 0.36 tCO2/MWh * 30 $/tCO2
-    marginal_cost_per_mwh: 42.5    # variable O&M + fuel + carbon = 4.5 + 27.2 + 10.8
-
-    # Direct operational emissions (used in PyPSA dispatch accounting)
+    fuel_cost_per_mwh: 27.2
+    carbon_price_per_tco2: 30
+    carbon_cost_per_mwh: 10.8
+    marginal_cost_per_mwh: 42.5
     co2_intensity_t_per_mwh: 0.36
 
-    # Life-cycle emissions (NREL LCA table)
     lifecycle_emissions_gco2e_per_kwh: 486
     lifecycle_breakdown_gco2e_per_kwh:
       one_time_upstream: 0.8
@@ -271,74 +366,44 @@ technologies:
       total_life_cycle: 486
 
     source_notes: >
-      NREL ATB 2026 Natural Gas CC, Market scenario. Midpoint CAPEX: 1,513 $/kW
-      (range 1,310–1,716 $/kW). OCC: 1,257.5 $/kW (range 1,075–1,440 $/kW).
-      Fixed O&M: 32.5 $/kW-yr (range 26–39 $/kW-yr).
-      Variable O&M: 4.5 $/MWh (range 2.1–6.9 $/MWh).
-      Fuel cost: 6.8 MMBtu/MWh * 4.0 $/MMBtu = 27.2 $/MWh.
-      Carbon cost: 0.36 tCO2/MWh * 30 $/tCO2 = 10.8 $/MWh.
-      Total marginal cost: 4.5 + 27.2 + 10.8 = 42.5 $/MWh.
-      Life-cycle emissions from NREL LCA table: 486 gCO2e/kWh.
+      NREL ATB 2026 Natural Gas CC, Market scenario.
+      Midpoint CAPEX: 1,513 $/kW (range 1,310-1,716 $/kW).
+      OCC: 1,257.5 $/kW (range 1,075-1,440 $/kW).
+      Fixed O&M: 32.5 $/kW-yr (range 26-39 $/kW-yr).
+      Variable O&M: 4.5 $/MWh. Fuel: 6.8 MMBtu/MWh * 4.0 $/MMBtu = 27.2 $/MWh.
+      Carbon: 0.36 tCO2/MWh * 30 $/tCO2 = 10.8 $/MWh.
+      Total marginal: 4.5 + 27.2 + 10.8 = 42.5 $/MWh.
+      Life-cycle emissions: 486 gCO2e/kWh.
 
   # ------------------------------------------------------------
-  # Utility-scale PV-plus-battery (reference only, not modeled separately)
-  # NREL ATB 2026, Utility-Scale PV-Plus-Battery, Market scenario
+  # PV-plus-battery (reference only — not modeled separately)
   # ------------------------------------------------------------
   solar_plus_battery:
     enabled: false
     carrier: solar_plus_battery
-
     capex_per_kw: 2077
     capex_range_per_kw:
       low: 1963
       high: 2191
-
     overnight_capital_cost_per_kw: 1896
-    overnight_capital_cost_range_per_kw:
-      low: 1792
-      high: 2000
-
     fixed_om_per_kw_year: 55
-    fixed_om_range_per_kw_year:
-      low: 51
-      high: 59
-
     variable_om_per_mwh: 0
     lifetime_years: 30
-
-    capacity_factor_range:
-      low: 0.21
-      high: 0.34
-
-    lcoe_range_per_mwh:
-      low: 44
-      high: 86
-
     co2_intensity_t_per_mwh: 0
 
-    source_notes: >
-      NREL ATB 2026 Utility-Scale PV-Plus-Battery, Market scenario.
-      Midpoint CAPEX: 2,077 $/kW (range 1,963–2,191 $/kW).
-      OCC: 1,896 $/kW (range 1,792–2,000 $/kW).
-      Fixed O&M: 55 $/kW-yr (range 51–59 $/kW-yr).
-      LCOE range: 44–86 $/MWh. Included for reference only.
-      Solar and BESS are modeled separately in the optimizer.
-
 # ============================================================
-# Capacity limits (optional — leave null to allow free optimization)
+# Capacity limits (null = free optimization)
 # ============================================================
 
 capacity_limits:
   solar:
     min_capacity_mw: 0
     max_capacity_mw:
-
   bess:
     min_power_capacity_mw: 0
     max_power_capacity_mw:
     min_energy_capacity_mwh: 0
     max_energy_capacity_mwh:
-
   natural_gas_cc:
     min_capacity_mw: 0
     max_capacity_mw:
@@ -381,12 +446,14 @@ outputs:
     - load_shedding_mwh
 
 # ============================================================
-# Policy Constraints
+# Policy constraints
 # ============================================================
 
 constraints:
-  # Scenario 3: CPUC 2035 target, CAISO share ~20 MtCO2 (Decision 24-02-047)
+  # Scenario solar_gas_co2cap:
+  # CPUC 2035 target, CAISO share ~25 MtCO2 (Decision 24-02-047, Feb 2024)
   co2_cap_tco2_per_year: 25000000
 
-  # Scenario 4: California SB 100 (2018) — 60% renewables by 2030
+  # Scenario solar_gas_rps:
+  # California SB 100 (2018) — 60% renewables by 2030
   min_renewable_fraction: 0.60

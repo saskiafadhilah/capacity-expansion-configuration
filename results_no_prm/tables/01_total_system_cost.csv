@@ -1,0 +1,6 @@
+Scenario,Total system cost ($/year),Total system cost ($B/year),Average system cost ($/MWh),Annual load served (TWh)
+Solar + BESS,100462218603.0102,100.4622,446.4975,225.0006
+Solar + BESS (8h),85376122160.2154,85.3761,379.4484,225.0006
+Solar + Nat. Gas,16111890927.3475,16.1119,71.6082,225.0006
+Solar + Gas (CO₂ Cap),1179624536462.647,1179.6245,5242.7615,225.0006
+Solar + Gas (60% RPS),3146113043589.517,3146.113,13982.6866,225.0006

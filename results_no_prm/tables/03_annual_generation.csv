@@ -1,0 +1,6 @@
+Scenario,Solar generation (TWh/year),Gas generation (TWh/year),Solar share of annual load (%),Gas share of annual load (%)
+Solar + BESS,237.1116,0.0,105.3826,0.0
+Solar + BESS (8h),244.2059,0.0,108.5357,0.0
+Solar + Nat. Gas,13.7548,211.2425,6.1132,93.8853
+Solar + Gas (CO₂ Cap),120.0035,69.4444,53.3347,30.8641
+Solar + Gas (60% RPS),135.0004,89.995,60.0,39.9977

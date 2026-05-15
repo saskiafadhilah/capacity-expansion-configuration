@@ -1,0 +1,6 @@
+Scenario,Solar capacity (GW),Battery power capacity (GW),Battery energy capacity (GWh),Gas capacity (GW)
+Solar + BESS,316.2017,202.2192,808.8766,0.0
+Solar + BESS (8h),327.266,97.9571,783.6565,0.0
+Solar + Nat. Gas,5.2058,0.0,0.0,41.0728
+Solar + Gas (CO₂ Cap),807.7289,0.0,0.0,15.8737
+Solar + Gas (60% RPS),23534.0579,0.0,0.0,38.1028

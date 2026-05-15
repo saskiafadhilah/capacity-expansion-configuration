@@ -1,0 +1,6 @@
+Scenario,Gas residual unserved load (MWh/year),Total load shedding (MWh/year),Load shedding (% of annual load)
+Solar + BESS,0.0,0.0,0.0
+Solar + BESS (8h),0.0,0.0,0.0
+Solar + Nat. Gas,3252.3076,3252.3076,0.0014
+Solar + Gas (CO₂ Cap),35552682.9131,35552682.9131,15.8011
+Solar + Gas (60% RPS),5232.4414,5232.4414,0.0023
